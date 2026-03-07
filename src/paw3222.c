@@ -473,8 +473,9 @@ static void paw32xx_motion_work_handler(struct k_work *work) {
         if (delta_ms > 0 && delta_ms < 100) {
             float speed = (float)(abs(x) + abs(y)) / (float)delta_ms;
             float sens  = (float)CONFIG_PAW3222_SCROLL_SENSITIVITY / 2.5f;
-            /* sigmoid: 1 + 9 / (1 + exp(-0.5*(speed-8))) */
-            accel = (1.0f + 9.0f * (1.0f / (1.0f + expf(-0.5f * (speed - 8.0f)))))
+            /* sigmoid: 1 + 4 / (1 + exp(-0.3*(speed-8))) 
+             * 最大加速を約5倍(元は10倍)に抑え、立ち上がりの傾き(-0.5 -> -0.3)も緩やかに */
+            accel = (1.0f + 4.0f * (1.0f / (1.0f + expf(-0.3f * (speed - 8.0f)))))
                     * sens;
         }
         data->last_motion_time = now;
