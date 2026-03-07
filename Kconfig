@@ -10,9 +10,21 @@ config PAW3222_SMART_SCROLL
     default n
     help
       Enable sigmoid-based acceleration and base sensitivity scaling for
-      scroll (and pointer) output. Also adds a remainder buffer that is
+      scroll output. Also adds a remainder buffer that is
       reset after 100 ms of inactivity, preventing the buffering artefact
       that occurs when using zip_xy_scaler.
+      This feature connects directly to ZMK's layer state.
+
+config PAW3222_SMART_SCROLL_LAYER
+    int "ZMK layer number to activate smart scroll"
+    default 2
+    depends on PAW3222_SMART_SCROLL
+    help
+      When this ZMK layer is active, the driver still sends INPUT_REL_X
+      and INPUT_REL_Y events, but applies the configured acceleration
+      and base sensitivity scaling. This relies on ZMK's scroll mapper
+      (zip_xy_to_scroll_mapper) in the overlay to convert them into
+      actual scroll events.
 
 config PAW3222_BASE_SENSITIVITY_PERCENT
     int "Base output sensitivity (1-100 percent)"

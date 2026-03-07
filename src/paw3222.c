@@ -12,6 +12,10 @@
 #include <stdlib.h>
 #include <math.h>
 
+#ifdef CONFIG_PAW3222_SMART_SCROLL
+#include <zmk/keymap.h>
+#endif
+
 #include <zephyr/devicetree.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -452,7 +456,8 @@ static void paw32xx_motion_work_handler(struct k_work *work) {
     LOG_DBG("x=%4d y=%4d", x, y);
 
 #ifdef CONFIG_PAW3222_SMART_SCROLL
-    {
+    uint8_t current_layer = zmk_keymap_highest_layer_active();
+    if (current_layer == CONFIG_PAW3222_SMART_SCROLL_LAYER) {
         int64_t now = k_uptime_get();
 
         /* ---- 残余バッファの時間リセット ----
@@ -502,6 +507,10 @@ static void paw32xx_motion_work_handler(struct k_work *work) {
                 input_report_rel(data->dev, INPUT_REL_Y, out_y, true, K_FOREVER);
             }
         }
+    } else {
+        /* 通常レイヤー（ポインタ移動）：スケーリングなし、そのまま出力 */
+        input_report_rel(data->dev, INPUT_REL_X, x, false, K_FOREVER);
+        input_report_rel(data->dev, INPUT_REL_Y, y, true, K_FOREVER);
     }
 #else
     input_report_rel(data->dev, INPUT_REL_X, x, false, K_FOREVER);
