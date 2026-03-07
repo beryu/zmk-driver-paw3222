@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <zephyr/devicetree.h>
 #include <zephyr/device.h>
@@ -93,6 +94,12 @@ struct paw32xx_data {
     uint32_t spim_sclk_psel;
     bool spim_mosi_psel_saved;
     bool spim_miso_psel_saved;
+#endif
+#ifdef CONFIG_PAW3222_SMART_SCROLL
+    float remainder_x;        /* sub-integer accumulator for X output */
+    float remainder_y;        /* sub-integer accumulator for Y output */
+    int64_t last_motion_time; /* timestamp of the previous motion event (ms) */
+    int64_t last_active_time; /* timestamp when remainders were last updated */
 #endif
 };
 
@@ -444,8 +451,61 @@ static void paw32xx_motion_work_handler(struct k_work *work) {
 
     LOG_DBG("x=%4d y=%4d", x, y);
 
+#ifdef CONFIG_PAW3222_SMART_SCROLL
+    {
+        int64_t now = k_uptime_get();
+
+        /* ---- 残余バッファの時間リセット ----
+         * 100 ms 以上入力が途絶えた場合、小数点以下の残余値を
+         * ゼロクリアする。方向転換時のバッファリング問題を防ぐ。 */
+        if (data->last_active_time > 0 &&
+            (now - data->last_active_time) > 100) {
+            data->remainder_x = 0.0f;
+            data->remainder_y = 0.0f;
+        }
+
+        /* ---- シグモイド加速 ----
+         * speed = 移動量 / 経過時間(ms)。
+         * 加速係数: 1.0 (遅い) 〜 10.0 (速い) のシグモイド曲線。 */
+        float accel = 1.0f;
+        int64_t delta_ms = (data->last_motion_time > 0)
+                           ? now - data->last_motion_time : 0;
+        if (delta_ms > 0 && delta_ms < 100) {
+            float speed = (float)(abs(x) + abs(y)) / (float)delta_ms;
+            float sens  = (float)CONFIG_PAW3222_SCROLL_SENSITIVITY / 2.5f;
+            /* sigmoid: 1 + 9 / (1 + exp(-0.5*(speed-8))) */
+            accel = (1.0f + 9.0f * (1.0f / (1.0f + expf(-0.5f * (speed - 8.0f)))))
+                    * sens;
+        }
+        data->last_motion_time = now;
+
+        /* ---- ベース感度スケーリング + 残余蓄積 ---- */
+        float base = (float)CONFIG_PAW3222_BASE_SENSITIVITY_PERCENT / 100.0f;
+        data->remainder_x += (float)x * accel * base;
+        data->remainder_y += (float)y * accel * base;
+        data->last_active_time = now;
+
+        /* 整数部分を切り出してイベント送信 */
+        int16_t out_x = (int16_t)data->remainder_x;
+        int16_t out_y = (int16_t)data->remainder_y;
+        data->remainder_x -= (float)out_x;
+        data->remainder_y -= (float)out_y;
+
+        if (out_x != 0 || out_y != 0) {
+            /* 最後のイベントに sync=true を立てる */
+            bool x_is_last = (out_y == 0);
+            if (out_x != 0) {
+                input_report_rel(data->dev, INPUT_REL_X, out_x, x_is_last, K_FOREVER);
+            }
+            if (out_y != 0) {
+                input_report_rel(data->dev, INPUT_REL_Y, out_y, true, K_FOREVER);
+            }
+        }
+    }
+#else
     input_report_rel(data->dev, INPUT_REL_X, x, false, K_FOREVER);
     input_report_rel(data->dev, INPUT_REL_Y, y, true, K_FOREVER);
+#endif
 
     // Schedule next check after 15ms without using interrupts
     k_timer_start(&data->motion_timer, K_MSEC(15), K_NO_WAIT);

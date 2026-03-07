@@ -4,3 +4,31 @@ menuconfig PAW3222
   select SPI
     help
       Enable PAW3222 mouse optical sensor.
+
+config PAW3222_SMART_SCROLL
+    bool "Enable smart scroll with sigmoid acceleration"
+    default n
+    help
+      Enable sigmoid-based acceleration and base sensitivity scaling for
+      scroll (and pointer) output. Also adds a remainder buffer that is
+      reset after 100 ms of inactivity, preventing the buffering artefact
+      that occurs when using zip_xy_scaler.
+
+config PAW3222_BASE_SENSITIVITY_PERCENT
+    int "Base output sensitivity (1-100 percent)"
+    default 5
+    range 1 100
+    depends on PAW3222_SMART_SCROLL
+    help
+      Scales the raw X/Y values by this percentage before applying sigmoid
+      acceleration. 5 means the sensor output is 5% of the raw value at
+      slow speeds. Fast motion is amplified by the sigmoid curve.
+
+config PAW3222_SCROLL_SENSITIVITY
+    int "Sigmoid acceleration sensitivity (1-10)"
+    default 2
+    range 1 10
+    depends on PAW3222_SMART_SCROLL
+    help
+      Controls how aggressively the sigmoid curve boosts fast motion.
+      Higher values make the acceleration effect stronger.
