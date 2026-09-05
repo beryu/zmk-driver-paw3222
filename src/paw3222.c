@@ -125,16 +125,6 @@ static NRF_SPIM_Type *paw32xx_nrf52_spim_from_bus(const struct device *dev) {
         return NRF_SPIM1;
     }
 #endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay) && defined(NRF_SPIM2)
-    if (cfg->spi.bus == DEVICE_DT_GET(DT_NODELABEL(spi2))) {
-        return NRF_SPIM2;
-    }
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi3), okay) && defined(NRF_SPIM3)
-    if (cfg->spi.bus == DEVICE_DT_GET(DT_NODELABEL(spi3))) {
-        return NRF_SPIM3;
-    }
-#endif
     return NULL;
 #else
     ARG_UNUSED(dev);
@@ -686,10 +676,6 @@ static int paw32xx_init(const struct device *dev) {
 
 #if defined(CONFIG_SOC_SERIES_NRF52X)
     data->spim = paw32xx_nrf52_spim_from_bus(dev);
-    if (data->spim == NULL) {
-        LOG_ERR("Unsupported nRF52 SPIM controller: %s", cfg->spi.bus->name);
-        return -ENOTSUP;
-    }
 #endif
 
     paw32xx_sdio_init(data);
@@ -812,16 +798,8 @@ static int paw32xx_pm_action(const struct device *dev, enum pm_device_action act
         gpio_pin_configure_dt(&cfg->spi.config.cs.gpio, GPIO_INPUT | GPIO_PULL_DOWN);
 #if defined(CONFIG_SOC_SERIES_NRF52X)
         struct paw32xx_data *data = dev->data;
-        if (data->spim != NULL) {
-            if (data->spim_miso_psel_saved) {
-                nrf_gpio_cfg_input(paw32xx_nrf52_psel_to_pin(data->spim_miso_psel),
-                                   NRF_GPIO_PIN_PULLDOWN);
-            }
-            if ((data->spim_sclk_psel & PAW32XX_NRF_PSEL_CONNECT_BIT) == 0U) {
-                nrf_gpio_cfg_input(paw32xx_nrf52_psel_to_pin(data->spim_sclk_psel),
-                                   NRF_GPIO_PIN_PULLDOWN);
-            }
-        }
+        nrf_gpio_cfg_input(paw32xx_nrf52_psel_to_pin(data->spim_miso_psel), NRF_GPIO_PIN_PULLDOWN);
+        nrf_gpio_cfg_input(paw32xx_nrf52_psel_to_pin(data->spim_sclk_psel), NRF_GPIO_PIN_PULLDOWN);
 #endif
         gpio_pin_configure_dt(&cfg->irq_gpio, GPIO_INPUT | GPIO_PULL_DOWN);
         gpio_pin_configure_dt(&cfg->power_gpio, GPIO_INPUT | GPIO_PULL_DOWN);
